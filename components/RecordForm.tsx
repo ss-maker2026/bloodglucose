@@ -6,6 +6,9 @@ import type { GlucoseRecord, Timing } from "@/lib/types";
 import { TIMINGS, getTimingLabel } from "@/lib/timing";
 import { loadRecords, saveRecords, findRecord, upsertRecord, deleteRecord } from "@/lib/storage";
 import { todayStr } from "@/lib/date";
+import { DEFAULT_TARGETS, loadTargets, getTargetForTiming, isWithinTarget, type TargetSettings } from "@/lib/targets";
+
+const SAVED_RESULT_DISPLAY_MS = 1400;
 
 function isValidTiming(value: string | null): value is Timing {
   return !!value && TIMINGS.some((t) => t.id === value);
@@ -21,14 +24,17 @@ export default function RecordForm() {
   const initialDate = searchParams.get("date") || today;
 
   const [records, setRecords] = useState<GlucoseRecord[]>([]);
+  const [targets, setTargets] = useState<TargetSettings>(DEFAULT_TARGETS);
   const [loaded, setLoaded] = useState(false);
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [glucoseInput, setGlucoseInput] = useState("");
   const [error, setError] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [savedResult, setSavedResult] = useState<{ glucose: number; target: number } | null>(null);
 
   useEffect(() => {
     setRecords(loadRecords());
+    setTargets(loadTargets());
     setLoaded(true);
   }, []);
 
@@ -48,7 +54,15 @@ export default function RecordForm() {
     setError("");
   }, [existingRecord]);
 
+  useEffect(() => {
+    if (!savedResult) return;
+    const timer = setTimeout(() => router.push("/"), SAVED_RESULT_DISPLAY_MS);
+    return () => clearTimeout(timer);
+  }, [savedResult, router]);
+
   if (!timing || !loaded) return null;
+
+  const target = getTargetForTiming(targets, timing);
 
   const handleSave = () => {
     const trimmed = glucoseInput.trim();
@@ -62,9 +76,9 @@ export default function RecordForm() {
       return;
     }
 
-    const updated = upsertRecord(records, selectedDate, timing, value);
+    const updated = upsertRecord(records, selectedDate, timing, value, target);
     saveRecords(updated);
-    router.push("/");
+    setSavedResult({ glucose: value, target });
   };
 
   const handleDelete = () => {
@@ -73,6 +87,40 @@ export default function RecordForm() {
     saveRecords(updated);
     router.back();
   };
+
+  if (savedResult) {
+    const within = isWithinTarget(savedResult.glucose, savedResult.target);
+    return (
+      <main className="flex flex-col items-center px-5 pt-16">
+        <h1 className="text-2xl font-bold text-slate-800">
+          {getTimingLabel(timing)}
+        </h1>
+
+        <p className="mt-10 text-sm font-medium text-slate-400">血糖値</p>
+        <p className="mt-1 text-5xl font-bold text-slate-800">
+          {savedResult.glucose}
+          <span className="ml-2 text-lg font-medium text-slate-400">mg/dL</span>
+        </p>
+
+        <p className="mt-8 text-sm font-medium text-slate-400">目標値</p>
+        <p className="mt-1 text-lg font-semibold text-slate-600">
+          {savedResult.target} mg/dL以下
+        </p>
+
+        <p
+          className={`mt-6 text-lg font-bold ${
+            within ? "text-accent-dark" : "text-slate-500"
+          }`}
+        >
+          {within ? "✓ 目標範囲内です" : "目標値を超えています"}
+        </p>
+
+        <div className="mt-10 rounded-full bg-slate-100 px-5 py-2 text-sm font-medium text-slate-500">
+          保存しました
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="px-5 pt-6">
@@ -126,6 +174,9 @@ export default function RecordForm() {
           <span className="text-xl font-medium text-slate-400">mg/dL</span>
         </div>
         {error && <p className="mt-4 text-sm font-medium text-red-500">{error}</p>}
+        <p className="mt-4 text-xs font-medium text-slate-400">
+          目標値：{target} mg/dL以下
+        </p>
       </div>
 
       <div className="mt-12 flex flex-col gap-3 pb-8">

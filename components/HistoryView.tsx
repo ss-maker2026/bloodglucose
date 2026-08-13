@@ -6,14 +6,17 @@ import type { GlucoseRecord } from "@/lib/types";
 import { TIMINGS } from "@/lib/timing";
 import { loadRecords } from "@/lib/storage";
 import { formatDateShortJP } from "@/lib/date";
+import { DEFAULT_TARGETS, loadTargets, getTargetForTiming, isWithinTarget, type TargetSettings } from "@/lib/targets";
 
 export default function HistoryView() {
   const router = useRouter();
   const [records, setRecords] = useState<GlucoseRecord[]>([]);
+  const [targets, setTargets] = useState<TargetSettings>(DEFAULT_TARGETS);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     setRecords(loadRecords());
+    setTargets(loadTargets());
     setLoaded(true);
   }, []);
 
@@ -46,6 +49,8 @@ export default function HistoryView() {
                   const record = records.find(
                     (r) => r.date === date && r.timing === t.id
                   );
+                  const target = record?.targetValue ?? getTargetForTiming(targets, t.id);
+                  const within = record ? isWithinTarget(record.glucose, target) : true;
                   return (
                     <button
                       key={t.id}
@@ -53,18 +58,29 @@ export default function HistoryView() {
                       onClick={() =>
                         router.push(`/record?date=${date}&timing=${t.id}`)
                       }
-                      className="flex items-center justify-between py-2.5 text-left"
+                      className="flex flex-col py-2.5 text-left"
                     >
-                      <span className="text-sm text-slate-500">{t.label}</span>
-                      {record ? (
-                        <span className="text-base font-bold text-slate-800">
-                          {record.glucose}
-                          <span className="ml-1 text-xs font-medium text-slate-400">
-                            mg/dL
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-slate-500">{t.label}</span>
+                        {record ? (
+                          <span className="text-base font-bold text-slate-800">
+                            {record.glucose}
+                            <span className="ml-1 text-xs font-medium text-slate-400">
+                              mg/dL
+                            </span>
                           </span>
+                        ) : (
+                          <span className="text-base text-slate-300">—</span>
+                        )}
+                      </div>
+                      {record && (
+                        <span
+                          className={`self-end text-xs font-semibold ${
+                            within ? "text-accent-dark" : "text-slate-500"
+                          }`}
+                        >
+                          {within ? "✓ 目標範囲内" : "目標値を超えています"}
                         </span>
-                      ) : (
-                        <span className="text-base text-slate-300">—</span>
                       )}
                     </button>
                   );
