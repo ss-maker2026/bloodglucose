@@ -1,0 +1,74 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import type { GlucoseRecord } from "@/lib/types";
+import { TIMINGS } from "@/lib/timing";
+import { loadRecords } from "@/lib/storage";
+import { formatDateLongJP, todayStr } from "@/lib/date";
+
+export default function TodayView() {
+  const router = useRouter();
+  const [records, setRecords] = useState<GlucoseRecord[]>([]);
+  const today = todayStr();
+
+  useEffect(() => {
+    setRecords(loadRecords());
+  }, []);
+
+  const recordedCount = TIMINGS.filter((t) =>
+    records.some((r) => r.date === today && r.timing === t.id)
+  ).length;
+
+  return (
+    <main className="px-4 pt-8 sm:pt-10">
+      <header className="mb-6">
+        <h1 className="text-xl font-bold text-slate-800">今日の記録</h1>
+        <p className="mt-1 text-sm text-slate-400">{formatDateLongJP(today)}</p>
+        <p className="mt-1 text-xs text-slate-400">
+          {recordedCount} / {TIMINGS.length} 件 記録済み
+        </p>
+      </header>
+
+      <div className="flex flex-col gap-3">
+        {TIMINGS.map((t) => {
+          const record = records.find(
+            (r) => r.date === today && r.timing === t.id
+          );
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() =>
+                router.push(`/record?date=${today}&timing=${t.id}`)
+              }
+              className={`flex w-full items-center justify-between rounded-2xl border px-5 py-4 text-left transition-colors active:scale-[0.99] ${
+                record
+                  ? "border-accent-light bg-accent-light/20"
+                  : "border-slate-200 bg-white hover:border-accent/40"
+              }`}
+            >
+              <span className="text-base font-medium text-slate-700">
+                {t.label}
+              </span>
+              {record ? (
+                <span className="flex items-baseline gap-2 text-accent-dark">
+                  <span className="text-sm">✓</span>
+                  <span className="text-2xl font-bold">{record.glucose}</span>
+                  <span className="text-xs font-medium text-slate-400">
+                    mg/dL
+                  </span>
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-sm font-semibold text-accent">
+                  <span className="text-lg leading-none">＋</span>
+                  記録する
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    </main>
+  );
+}
